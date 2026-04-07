@@ -2,7 +2,7 @@
 
 A Streamlit chatbot that helps students with **Science**, **Math**, **English**, and **Essay** feedback. Each subject has its own Python module so you can change system prompts and settings independently.
 
-Intended repository: [https://github.com/anirbandasjgd/Student_Tutor](https://github.com/anirbandasjgd/Student_Tutor)
+Repository: [https://github.com/anirbandasjgd/Student_Tutor](https://github.com/anirbandasjgd/Student_Tutor)
 
 ## Prerequisites
 
