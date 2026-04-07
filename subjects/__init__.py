@@ -1,15 +1,16 @@
-"""Subject modules: Science, Math, English, Essay."""
+"""Subject modules: Science, Math, English, General knowledge, Essay."""
 
 from typing import Any, Optional
 
-from . import english, essay, math, science
+from . import english, essay, general_knowledge, math, science
 
-SUBJECT_KEYS = ("Science", "Math", "English", "Essay")
+SUBJECT_KEYS = ("Science", "Math", "English", "General knowledge", "Essay")
 
 _MODULE_MAP: dict[str, Any] = {
     "Science": science,
     "Math": math,
     "English": english,
+    "General knowledge": general_knowledge,
     "Essay": essay,
 }
 

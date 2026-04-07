@@ -9,7 +9,7 @@ cd StudentTutor
 streamlit run app.py
 ```
 
-Confirm the page loads, the subject radio options list Science / Math / English / Essay, and the chat input is visible.
+Confirm the page loads, the subject radio options list Science / Math / English / General knowledge / Essay, and the chat input is visible.
 
 ## Subject modules
 
@@ -18,8 +18,9 @@ For each subject, send a short question and confirm you get a relevant reply:
 - **Science:** e.g. “What is photosynthesis in one sentence?”
 - **Math:** e.g. “What is the Pythagorean theorem?”
 - **English:** e.g. “What’s the difference between ‘affect’ and ‘effect’?”
+- **General knowledge:** e.g. “What is the capital of Japan?” or another topic outside the other subjects.
 
-Science, Math, and English use **150 max output tokens** (see each file under `subjects/`).
+Science, Math, English, and General knowledge use **150 max output tokens** (see each file under `subjects/`).
 
 ## Essay mode
 
@@ -32,7 +33,7 @@ Science, Math, and English use **150 max output tokens** (see each file under `s
 
 1. Send a few messages in any subject.
 2. Click **New chat**, send another message.
-3. In **Saved chats**, open a subject section (Science / Math / English / Essay), click a previous session, and confirm messages reload.
+3. In **Saved chats**, open a subject section (Science / Math / English / General knowledge / Essay), click a previous session, and confirm messages reload.
 
 ## API errors
 

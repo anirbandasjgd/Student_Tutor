@@ -1,5 +1,5 @@
 """
-Student Tutor — Streamlit chatbot for Science, Math, English, and Essay.
+Student Tutor — Streamlit chatbot for Science, Math, English, General knowledge, and Essay.
 Run from this directory: streamlit run app.py
 """
 
@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import sys
 from collections import defaultdict
+from typing import Any
 
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path:
@@ -17,29 +18,77 @@ import streamlit as st
 from openai import OpenAI
 
 import chat_storage
-from config import CHATS_DIR, DEFAULT_MODEL
+from config import DEFAULT_MODEL
 from subjects import SUBJECT_KEYS, get_max_tokens, get_system_message
 from subjects import essay as essay_subject
 
-api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=api_key) if api_key else None
+
+def _effective_api_key() -> str:
+    """Sidebar key (if non-empty) takes precedence over OPENAI_API_KEY in the environment."""
+    from_ui = (st.session_state.get("user_openai_key") or "").strip()
+    if from_ui:
+        return from_ui
+    return (os.getenv("OPENAI_API_KEY") or "").strip()
+
+
+def _openai_client():
+    key = _effective_api_key()
+    return OpenAI(api_key=key) if key else None
 
 CHAT_INPUT_PLACEHOLDERS = {
     "Science": "Ask me any Science related questions",
     "Math": "Ask me any Math related questions",
     "English": "Ask me any English Grammer related questions",
+    "General knowledge": "Ask about any topic outside Science, Math, or English",
     "Essay": "Paste your essay for evaluation",
 }
 
 
+def _extract_assistant_text(message) -> str:
+    """Normalize message.content (str, None, or list of content parts) to plain text."""
+    raw = getattr(message, "content", None)
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw.strip()
+    if isinstance(raw, list):
+        parts: list[str] = []
+        for block in raw:
+            if isinstance(block, dict):
+                if block.get("type") == "text" and "text" in block:
+                    parts.append(str(block["text"]))
+                elif "text" in block:
+                    parts.append(str(block["text"]))
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts).strip()
+    return str(raw).strip()
+
+
+_SUBJECT_FILE_FOR_HINT = {
+    "Science": "science",
+    "Math": "math",
+    "English": "english",
+    "General knowledge": "general_knowledge",
+    "Essay": "essay",
+}
+
+
 def _call_model(
+    client: OpenAI,
     messages: list[dict[str, str]],
     model: str,
     max_tokens: int,
+    *,
+    subject_key: str = "Math",
 ) -> str:
     if not client:
-        raise RuntimeError("OPENAI_API_KEY is not set.")
-    kwargs = {"model": model, "messages": messages}
+        raise RuntimeError("OpenAI client is not configured.")
+    kwargs: dict[str, Any] = {"model": model, "messages": messages}
+    effort = os.getenv("OPENAI_REASONING_EFFORT", "").strip()
+    if effort:
+        kwargs["reasoning_effort"] = effort
+
     try:
         resp = client.chat.completions.create(**kwargs, max_tokens=max_tokens)
     except Exception as e:
@@ -51,9 +100,49 @@ def _call_model(
             resp = client.chat.completions.create(
                 **kwargs, max_completion_tokens=max_tokens
             )
+        elif "reasoning_effort" in err and "reasoning_effort" in kwargs:
+            kwargs.pop("reasoning_effort", None)
+            resp = client.chat.completions.create(**kwargs, max_tokens=max_tokens)
         else:
             raise
-    return (resp.choices[0].message.content or "").strip()
+
+    choice = resp.choices[0]
+    msg = choice.message
+    text = _extract_assistant_text(msg)
+
+    refusal = getattr(msg, "refusal", None)
+    if refusal:
+        return f"The model declined to answer: {refusal}"
+
+    if text:
+        return text
+
+    finish = getattr(choice, "finish_reason", None) or ""
+    usage = getattr(resp, "usage", None)
+    detail = ""
+    if usage is not None:
+        ctd = getattr(usage, "completion_tokens_details", None)
+        if ctd is not None:
+            rt = getattr(ctd, "reasoning_tokens", None)
+            if rt is not None:
+                detail = f" (reasoning_tokens≈{rt})"
+
+    sub_file = _SUBJECT_FILE_FOR_HINT.get(subject_key, "math")
+
+    if finish == "length":
+        return (
+            "**No visible reply:** the output budget ran out before the model wrote an answer. "
+            "This often happens with **reasoning models** (reasoning uses the same token limit). "
+            f"Try raising `MAX_TOKENS` in `subjects/{sub_file}.py`, "
+            "or set `OPENAI_REASONING_EFFORT=low` in `.env` if your model supports it, then reload."
+        )
+
+    return (
+        "**No visible reply** from the model "
+        f"(finish_reason={finish!r}{detail}). "
+        "Try a higher `MAX_TOKENS` for this subject, set `OPENAI_REASONING_EFFORT=low` in `.env`, "
+        "or switch `OPENAI_MODEL` to a non-reasoning chat model."
+    )
 
 
 def _init_state() -> None:
@@ -65,6 +154,8 @@ def _init_state() -> None:
         st.session_state.subject = "Science"
     if "essay_grade" not in st.session_state:
         st.session_state.essay_grade = None
+    if "user_openai_key" not in st.session_state:
+        st.session_state.user_openai_key = ""
 
 
 def _persist() -> None:
@@ -89,9 +180,25 @@ def main() -> None:
     _init_state()
 
     st.title("Student Tutor")
-    st.caption("Ask questions in Science, Math, English, or get essay feedback.")
+    st.caption(
+        "Ask questions in Science, Math, English, General knowledge, or get essay feedback."
+    )
 
     with st.sidebar:
+        st.subheader("OpenAI API key")
+        st.text_input(
+            "Paste your API key",
+            type="password",
+            placeholder="sk-…",
+            help="Stored only in this browser session. Leave empty to use OPENAI_API_KEY from your .env file.",
+            key="user_openai_key",
+        )
+        st.caption(
+            "Get a key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys)."
+        )
+
+        st.divider()
+
         st.subheader("Subject")
         subject = st.radio(
             "Choose topic",
@@ -167,13 +274,12 @@ def main() -> None:
                             st.session_state.essay_grade = data.get("essay_grade")
                             st.rerun()
 
-        st.caption(f"Chats folder: `{CHATS_DIR}`")
-
     model = os.getenv("OPENAI_MODEL", DEFAULT_MODEL)
+    client = _openai_client()
 
-    if not api_key:
+    if not _effective_api_key():
         st.error(
-            "Set `OPENAI_API_KEY` in a `.env` file in this folder (see `.env.example`)."
+            "Add your OpenAI API key in the sidebar, or set `OPENAI_API_KEY` in a `.env` file (see `.env.example`)."
         )
 
     system_msg = get_system_message(
@@ -203,11 +309,11 @@ def main() -> None:
 
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        if not api_key:
+        if not client:
             st.session_state.messages.append(
                 {
                     "role": "assistant",
-                    "content": "_Cannot reply: set `OPENAI_API_KEY` in `.env`._",
+                    "content": "_Cannot reply: add your API key in the sidebar or set `OPENAI_API_KEY` in `.env`._",
                 }
             )
             _persist()
@@ -221,7 +327,13 @@ def main() -> None:
             ]
         )
         try:
-            reply = _call_model(api_messages, model, max_tokens)
+            reply = _call_model(
+                client,
+                api_messages,
+                model,
+                max_tokens,
+                subject_key=st.session_state.subject,
+            )
         except Exception as e:
             reply = f"Error calling the model: {e}"
 

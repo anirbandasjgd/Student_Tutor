@@ -1,6 +1,6 @@
 # Student Tutor
 
-A Streamlit chatbot that helps students with **Science**, **Math**, **English**, and **Essay** feedback. Each subject has its own Python module so you can change system prompts and settings independently.
+A Streamlit chatbot that helps students with **Science**, **Math**, **English**, **General knowledge**, and **Essay** feedback. Each subject has its own Python module so you can change system prompts and settings independently.
 
 Repository: [https://github.com/anirbandasjgd/Student_Tutor](https://github.com/anirbandasjgd/Student_Tutor)
 
@@ -45,7 +45,7 @@ From the `StudentTutor` directory:
 streamlit run app.py
 ```
 
-The app opens in your browser. Choose a subject in the sidebar, then chat. **Essay** mode enforces a **150-word maximum** on the student’s essay text and supports optional **grade level** (1–12) so feedback complexity matches the spec.
+The app opens in your browser. Choose a subject in the sidebar, then chat. **General knowledge** is for questions that are not mainly Science, Math, or English. **Essay** mode enforces a **150-word maximum** on the student’s essay text and supports optional **grade level** (1–12) so feedback complexity matches the spec.
 
 ## Project layout
 
@@ -57,6 +57,7 @@ The app opens in your browser. Choose a subject in the sidebar, then chat. **Ess
 | `subjects/science.py` | Science system message, `max_tokens` |
 | `subjects/math.py` | Math system message, `max_tokens` |
 | `subjects/english.py` | English system message, `max_tokens` |
+| `subjects/general_knowledge.py` | General knowledge system message, `max_tokens` |
 | `subjects/essay.py` | Essay rules, grade bands, 150-word policy |
 
 ## Testing
