@@ -20,6 +20,7 @@ from openai import OpenAI
 import importlib
 
 import chat_storage
+import content_guard
 from config import DEFAULT_MODEL
 from student_identity import student_storage_key
 from subjects import SUBJECT_KEYS, get_max_tokens, get_system_message
@@ -363,6 +364,12 @@ def main() -> None:
                 )
                 st.stop()
 
+        if client:
+            mod_block = content_guard.moderation_block_reason(client, prompt)
+            if mod_block:
+                st.warning(mod_block)
+                st.stop()
+
         st.session_state.messages.append({"role": "user", "content": prompt})
 
         if not client:
@@ -392,6 +399,9 @@ def main() -> None:
             )
         except Exception as e:
             reply = f"Error calling the model: {e}"
+
+        if client:
+            reply = content_guard.safe_assistant_reply(client, reply)
 
         st.session_state.messages.append({"role": "assistant", "content": reply})
         _persist()
