@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.env
+.venv/
+data/chats/*.json
+# Microsoft Word lock/temp files
+~$*.docx
