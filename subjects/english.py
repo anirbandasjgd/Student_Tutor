@@ -5,4 +5,4 @@ SYSTEM_MESSAGE = (
     "or vocabulary related questions."
 )
 
-MAX_TOKENS = 150
+MAX_TOKENS = 6000
