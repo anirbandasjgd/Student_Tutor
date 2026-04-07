@@ -3,5 +3,6 @@ __pycache__/
 .env
 .venv/
 data/chats/*.json
+data/chats/students/
 # Microsoft Word lock/temp files
 ~$*.docx

@@ -53,7 +53,8 @@ The app opens in your browser. Choose a subject in the sidebar, then chat. **Gen
 |------|--------|
 | `app.py` | Streamlit UI, OpenAI calls, session handling |
 | `config.py` | Model name and data paths |
-| `chat_storage.py` | Save/load chat JSON files under `data/chats/` |
+| `chat_storage.py` | Save/load chat JSON under `data/chats/students/<key>/` (per student) |
+| `student_identity.py` | Map student name to a stable storage key for isolation |
 | `subjects/science.py` | Science system message, `max_tokens` |
 | `subjects/math.py` | Math system message, `max_tokens` |
 | `subjects/english.py` | English system message, `max_tokens` |
@@ -66,4 +67,4 @@ See [TESTING.md](TESTING.md) for manual test steps.
 
 ## Chat history
 
-Conversations are saved automatically as JSON files in `data/chats/`. In the sidebar, **Saved chats** are grouped by subject; expand a section to load a past session, or start a **New chat**.
+Enter your **full name** in the sidebar (required). Chats are saved per student under `data/chats/students/<storage-key>/`; **Saved chats** lists only that student’s sessions, grouped by subject. Changing the name switches to that student’s history (or starts fresh).

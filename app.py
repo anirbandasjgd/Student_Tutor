@@ -17,8 +17,11 @@ if _ROOT not in sys.path:
 import streamlit as st
 from openai import OpenAI
 
+import importlib
+
 import chat_storage
 from config import DEFAULT_MODEL
+from student_identity import student_storage_key
 from subjects import SUBJECT_KEYS, get_max_tokens, get_system_message
 from subjects import essay as essay_subject
 
@@ -156,11 +159,34 @@ def _init_state() -> None:
         st.session_state.essay_grade = None
     if "user_openai_key" not in st.session_state:
         st.session_state.user_openai_key = ""
+    if "student_name" not in st.session_state:
+        st.session_state.student_name = ""
+    if "_last_student_sk" not in st.session_state:
+        st.session_state._last_student_sk = None
+
+
+def _sync_student_identity() -> None:
+    """Reset chat when switching to a different student; track storage key."""
+    sk = student_storage_key(st.session_state.get("student_name", ""))
+    prev = st.session_state.get("_last_student_sk")
+    if sk is None:
+        st.session_state._last_student_sk = None
+        return
+    if prev is not None and sk != prev:
+        st.session_state.session_id = chat_storage.new_session_id()
+        st.session_state.messages = []
+        st.session_state.essay_grade = None
+    st.session_state._last_student_sk = sk
 
 
 def _persist() -> None:
+    sk = student_storage_key(st.session_state.get("student_name", ""))
+    if not sk:
+        return
     chat_storage.save_session(
         st.session_state.session_id,
+        sk,
+        st.session_state.get("student_name", "").strip(),
         st.session_state.subject,
         st.session_state.messages,
         essay_grade=st.session_state.essay_grade
@@ -176,6 +202,9 @@ def _start_new_chat() -> None:
 
 
 def main() -> None:
+    # Pick up latest `chat_storage` from disk (avoids stale module after edits / Streamlit reload quirks).
+    importlib.reload(chat_storage)
+
     st.set_page_config(page_title="Student Tutor", page_icon="📚", layout="wide")
     _init_state()
 
@@ -185,6 +214,17 @@ def main() -> None:
     )
 
     with st.sidebar:
+        st.subheader("Student")
+        st.text_input(
+            "Your full name (required)",
+            placeholder="e.g. Alex Johnson",
+            help="Chats are saved only for you. Enter your name before chatting.",
+            key="student_name",
+        )
+        _sync_student_identity()
+
+        st.divider()
+
         st.subheader("OpenAI API key")
         st.text_input(
             "Paste your API key",
@@ -239,40 +279,56 @@ def main() -> None:
             st.rerun()
 
         st.subheader("Saved chats")
-        sessions = chat_storage.list_sessions()
-        grouped: defaultdict[str, list] = defaultdict(list)
-        for s in sessions:
-            subj = (s.get("subject") or "Science").strip()
-            if subj not in SUBJECT_KEYS:
-                subj = "Other"
-            grouped[subj].append(s)
+        _sk = student_storage_key(st.session_state.get("student_name", ""))
+        if not _sk:
+            st.caption("Enter your name above to see your saved chats.")
+        else:
+            sessions = chat_storage.list_student_sessions(_sk)
+            grouped: defaultdict[str, list] = defaultdict(list)
+            for s in sessions:
+                subj = (s.get("subject") or "Science").strip()
+                if subj not in SUBJECT_KEYS:
+                    subj = "Other"
+                grouped[subj].append(s)
 
-        group_order = list(SUBJECT_KEYS)
-        if grouped.get("Other"):
-            group_order.append("Other")
+            group_order = list(SUBJECT_KEYS)
+            if grouped.get("Other"):
+                group_order.append("Other")
 
-        for subj in group_order:
-            subs = grouped.get(subj, [])
-            if not subs:
-                continue
-            with st.expander(
-                f"{subj} ({len(subs)})",
-                expanded=(subj == st.session_state.subject),
-            ):
-                for s in subs:
-                    label = (s.get("title") or "Chat")[:40]
-                    if st.button(
-                        label,
-                        key=f"load_{s['session_id']}",
-                        use_container_width=True,
-                    ):
-                        data = chat_storage.load_session(s["session_id"])
-                        if data:
-                            st.session_state.session_id = data["session_id"]
-                            st.session_state.messages = data.get("messages", [])
-                            st.session_state.subject = data.get("subject", "Science")
-                            st.session_state.essay_grade = data.get("essay_grade")
-                            st.rerun()
+            for subj in group_order:
+                subs = grouped.get(subj, [])
+                if not subs:
+                    continue
+                with st.expander(
+                    f"{subj} ({len(subs)})",
+                    expanded=(subj == st.session_state.subject),
+                ):
+                    for s in subs:
+                        label = (s.get("title") or "Chat")[:40]
+                        if st.button(
+                            label,
+                            key=f"load_{_sk}_{s['session_id']}",
+                            use_container_width=True,
+                        ):
+                            data = chat_storage.load_session(s["session_id"], _sk)
+                            if data:
+                                st.session_state.session_id = data["session_id"]
+                                st.session_state.messages = data.get("messages", [])
+                                st.session_state.subject = data.get("subject", "Science")
+                                st.session_state.essay_grade = data.get("essay_grade")
+                                st.rerun()
+
+    sk_main = student_storage_key(st.session_state.get("student_name", ""))
+    name_ok = sk_main is not None
+
+    if name_ok:
+        st.caption(
+            f"Student: **{st.session_state.student_name.strip()}** — saved chats are only shown for this name."
+        )
+    else:
+        st.warning(
+            "Enter your **full name** in the sidebar (required) before you can chat or see saved history."
+        )
 
     model = os.getenv("OPENAI_MODEL", DEFAULT_MODEL)
     client = _openai_client()
@@ -297,7 +353,7 @@ def main() -> None:
     _ph = CHAT_INPUT_PLACEHOLDERS.get(
         st.session_state.subject, CHAT_INPUT_PLACEHOLDERS["Science"]
     )
-    if prompt := st.chat_input(placeholder=_ph):
+    if prompt := st.chat_input(placeholder=_ph, disabled=not name_ok):
         if st.session_state.subject == "Essay":
             wc = essay_subject.count_words(prompt)
             if not essay_subject.essay_within_limit(prompt):
